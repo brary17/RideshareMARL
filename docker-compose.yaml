@@ -1,0 +1,14 @@
+services:
+  rideshare-sim:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    # volumes:
+    #   - ./:/rideshare-sim/
+#     networks:
+#       - bridge
+
+# networks:
+#   bridge:
+#     external:
+#       name: bridge
