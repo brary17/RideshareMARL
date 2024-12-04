@@ -1,3 +1,6 @@
 **/Agents/**
 **/__pycache__/**
 **/*.env
+**/.venv/**
+**/wandb/**
+**/runs/**

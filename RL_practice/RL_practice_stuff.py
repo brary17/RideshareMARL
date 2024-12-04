@@ -3,9 +3,8 @@ import numpy as np
 import os
 from datetime import datetime
 import matplotlib.pyplot as plt
-# from torch.cuda.amp import GradScaler, autocast
 from torch.amp import GradScaler, autocast
-import gymnasium as gym
+import time
 
 class NeuralNet(torch.nn.Module):
     def __init__(self, input_size, output_size, is_actor):
@@ -92,7 +91,16 @@ class ReplayBuffer:
         return self.size
 
 class Agent:
-    def __init__(self, state_space_size, action_space_size, buffer_size=10000, batch_size=64, gamma=0.99):
+    def __init__(
+            self, 
+            state_space_size, 
+            action_space_size, 
+            buffer_size=10000, 
+            batch_size=64, 
+            gamma=0.99,
+            train_every_n_iters=1,
+            **kwargs
+        ):
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         self.actor = NeuralNet(state_space_size, action_space_size, is_actor=True).to(self.device)
         self.critic = NeuralNet(state_space_size, 1, is_actor=False).to(self.device)
@@ -104,6 +112,18 @@ class Agent:
         self.action_space_size = action_space_size
         self.scaler = GradScaler()
         self.training_iter = 0
+        self.episode_num = 0
+        self.steps_since_train = 0
+        self.train_every_n_iters = train_every_n_iters
+        self.kwargs = kwargs
+    
+    def start_clock(self, attr_name):
+        setattr(self, f"start_time_{attr_name}", time.time())
+
+    def stop_clock(self, attr_name):
+        tot_time_ms = time.time() - getattr(self, f"start_time_{attr_name}")
+        setattr(self, f"end_time_{attr_name}", time.time())
+        setattr(self, f"tot_time_{attr_name}", tot_time_ms)
 
     def get_action(self, state):
         with torch.no_grad():
@@ -113,22 +133,24 @@ class Agent:
 
     def step(self, state, action, reward, next_state, done):
         self.memory.add((state, action, reward, next_state, done))
-        if len(self.memory) >= self.batch_size:
-            self.learn_from_replay()
+        self.steps_since_train += 1
 
-    def save_models(self, train_time, test_time, test_scores, reward_full=[]):
+    def save_models(self, test_scores, reward_full=[]):
         now = datetime.now()
         time_name = now.strftime("%m_%d__%H_%M")
         dir_name = f"Agents/agent_{time_name}"
         os.makedirs(dir_name, exist_ok=True)
-        with open(f"{dir_name}/eval_metrics.txt", "w") as eval_f:
-            eval_f.write(f"Training Time: {(train_time * 1000) : .2f} milliseconds")
-            eval_f.write(f"Testing Time:  {(test_time * 1000): .2f} milliseconds")
+        with open(f"{dir_name}/agent_info.txt", "w") as eval_f:
+            eval_f.write(f"Training Time: {(self.tot_time_train * 1000) : .2f} milliseconds\n")
+            eval_f.write(f"Testing Time:  {(self.tot_time_test * 1000): .2f} milliseconds\n")
             for idx, score in test_scores:
                 eval_f.write(f"Testing Score Round {idx+1}: {score}\n")
+            eval_f.write('\n\nHyperparameters:\n')
+        
 
         torch.save(self.actor, f"{dir_name}/actor_full_model.pth")
         torch.save(self.critic, f"{dir_name}/critic_full_model.pth")
+
 
         if reward_full == []: return
         
@@ -154,6 +176,13 @@ class Agent:
         ax.legend(loc='upper left')
 
         fig.savefig(f"{dir_name}/stacked_area_training.png")
+
+    def train_models(self):
+        self.episode_num += 1
+        if (self.episode_num) % self.train_every_n_iters != 0: return
+        for _ in range(self.steps_since_train):
+            self.learn_from_replay()
+        self.steps_since_train = 0
 
     def learn_from_replay(self):
         states, actions, rewards, next_states, dones = self.memory.sample(self.batch_size)
@@ -182,46 +211,3 @@ class Agent:
         self.scaler.update()
 
         self.training_iter += 1
-        
-if __name__ == "__main__":
-    from torch.profiler import profile, record_function, ProfilerActivity
-
-    num_episodes = 50
-    env = gym.make('LunarLander-v3')
-    agent = Agent(
-        len(env.observation_space.high), 
-        env.action_space.n, 
-        batch_size=64
-    )
-    # Set up the profiler
-    with profile(
-        activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-        schedule=torch.profiler.schedule(wait=1, warmup=1, active=2, repeat=1),
-        on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/profiler'),
-        record_shapes=True,
-        profile_memory=True,
-        with_stack=True
-    ) as prof:
-        
-        # Run profiling on a subset of episodes
-        for episode in range(num_episodes): 
-            # Reset the environment and get the initial state
-            state, _ = env.reset()
-            terminated, truncated = False, False
-            rewards = []
-            
-            # Record the full episode step-by-step
-            while (not terminated) and (not truncated):
-                with record_function("get_action"):
-                    action = agent.get_action(state)
-                
-                next_state, reward, terminated, truncated, _ = env.step(action)
-                
-                with record_function("step"):
-                    agent.step(state, action, reward, next_state, terminated or truncated)
-                
-                rewards.append(reward)
-                state = next_state  # Move to the next state
-
-            # Each iteration, signal the profiler to advance
-            prof.step()

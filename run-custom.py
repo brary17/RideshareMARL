@@ -32,9 +32,7 @@ parser = ConfigParser()
 parser.read('config.ini')
 agent_args = Dict(parser, args.algo)
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-if args.use_cuda == False:
-    device = 'cpu'
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 if args.tensorboard:
     from torch.utils.tensorboard import SummaryWriter
@@ -72,10 +70,10 @@ env_kwargs = {
     "traj_length":      agent_args["traj_length"]
 }
 
-run = wandb.init(
-    project="Rideshare Multi Episodic",
-    config={**env_kwargs, **agent_args},
-)
+# run = wandb.init(
+#     project="Two-Way Markets",
+#     config={**env_kwargs, **agent_args},
+# )
 
 env = MultiRideshareEnv(**env_kwargs)
 possible_agents = env.possible_agents
@@ -108,14 +106,26 @@ class PPOAgent:
 
 
 if args.algo == 'ppo':
-    agent_U = PPOAgent(writer, device, state_dim, action_dim, agent_args)
-    agent_L = PPOAgent(writer, device, state_dim, action_dim, agent_args)
+    agent_U = PPOAgent(
+        writer=writer, 
+        device=device, 
+        state_dim=state_dim, 
+        action_dim=action_dim, 
+        args=agent_args
+    )
+    agent_L = PPOAgent(
+        writer=writer, 
+        device=device, 
+        state_dim=state_dim, 
+        action_dim=action_dim, 
+        args=agent_args
+    )
 else:
     raise NotImplementedError("Only PPO supported for now")
 
 if (torch.cuda.is_available()) and (args.use_cuda):
-    agent_U = agent_U.cuda()
-    agent_L = agent_L.cuda()
+    agent_U.agent.to(torch.device('cuda'))
+    agent_L.agent.to(torch.device('cuda'))
 
 if args.load != 'no':
     agent_U.load_state_dict(torch.load("./model_weights/" + args.load + "_U"))
@@ -136,7 +146,9 @@ for n_epi in range(args.epochs):
         action_U = agent_U.sample_action(state)
         action_L = agent_L.sample_action(state)
         actions = {"U": action_U, "L": action_L}
-        log = done = agent_args.traj_length -1 == t
+        # Do something to make the log work
+        # log = done = agent_args.traj_length -1 == t
+        log = False
         observations, rewards, terminations, truncations, infos = env.step(actions, log)
 
         next_state_ = observations["U"] # agents share observations, whichever's fine
