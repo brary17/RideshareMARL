@@ -31,33 +31,26 @@ def make_transition(state, action, reward, next_state, done, log_prob=None):
     return transition
 
 
-def make_mini_batch(*value):
-    mini_batch_size = value[0]
-    full_batch_size = len(value[1])
-    full_indices = np.arange(full_batch_size)
-    np.random.shuffle(full_indices)
-    for i in range(full_batch_size // mini_batch_size):
-        indices = full_indices[mini_batch_size * i: mini_batch_size * (i + 1)]
-        yield [x[indices] for x in value[1:]]
-
-
-def convert_to_tensor(*value):
-    device = value[0]
-    return [torch.tensor(x).float().to(device) for x in value[1:]]
 
 class ReplayBuffer:
-    def __init__(self, max_size, state_dim, num_action, device=torch.device("cpu")):
+    def __init__(
+            self, 
+            max_size, 
+            state_dim, 
+            num_action, 
+            device=torch.device("cpu")
+        ):
         self.max_size = max_size
         self.data_idx = 0
         self.device = device
 
         # Pre-allocate tensors for buffer data
-        self.states = torch.zeros((max_size, state_dim), device=self.device)
-        self.actions = torch.zeros((max_size, num_action), device=self.device)
-        self.rewards = torch.zeros((max_size, 1), device=self.device)
-        self.next_states = torch.zeros((max_size, state_dim), device=self.device)
-        self.dones = torch.zeros((max_size, 1), device=self.device)
-        self.log_probs = torch.zeros((max_size, 1), device=self.device)
+        self.states: torch.Tensor = torch.zeros((max_size, state_dim), device=self.device)
+        self.actions: torch.Tensor = torch.zeros((max_size, num_action), device=self.device)
+        self.rewards: torch.Tensor = torch.zeros((max_size, 1), device=self.device)
+        self.next_states: torch.Tensor = torch.zeros((max_size, state_dim), device=self.device)
+        self.dones: torch.Tensor = torch.zeros((max_size, 1), device=self.device)
+        self.log_probs: torch.Tensor = torch.zeros((max_size, 1), device=self.device)
 
     def put_data(self, transition):
         self.states[self.data_idx] = torch.tensor(transition['state'], device=self.device)
@@ -69,9 +62,18 @@ class ReplayBuffer:
 
         self.data_idx = (self.data_idx + 1) % self.max_size
 
-    def sample(self, batch_size, time_steps):
+    def sample(self, batch_size=None, time_steps=1):
+        if batch_size is None:
+            max_idx = self.size()
+            return (
+                self.states[:max_idx], 
+                self.actions[:max_idx], 
+                self.rewards[:max_idx], 
+                self.next_states[:max_idx], 
+                self.dones[:max_idx], 
+                self.log_probs[:max_idx],
+            )
         indices = torch.randint(0, self.size, (batch_size,), device=self.device)
-
         time_offsets = torch.arange(time_steps, device=self.device).unsqueeze(0)  # Shape: (1, time_steps)
 
         start_indices = indices.unsqueeze(1) - time_offsets  # Shape: (batch_size, time_steps)
@@ -87,6 +89,26 @@ class ReplayBuffer:
 
     def size(self):
         return min(self.max_size, self.data_idx)
+
+    def make_mini_batch(self, mini_batch_size, get_gae):
+        data = self.sample()
+        states, actions, rewards, next_states, dones, old_log_probs = data
+        old_values, advantages = get_gae(states, rewards, next_states, dones)
+        returns = advantages + old_values
+        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-3)
+
+        full_batch_size = states.size(0)
+        full_indices = torch.randperm(full_batch_size, device=self.device)
+        for i in range((full_batch_size // mini_batch_size)+1):
+                indices = full_indices[mini_batch_size * i: min(mini_batch_size * (i + 1), len(full_indices))]
+                yield (
+                    states[indices],
+                    actions[indices],
+                    old_log_probs[indices],
+                    advantages[indices],
+                    returns[indices],
+                    old_values[indices],
+                )
 
 
 class RunningMeanStd(object):

@@ -1,0 +1,74 @@
+{
+  "CustomFullyConnected": {
+    "description": "A fully connected feedforward neural network.",
+    "parameters": {
+      "block_input_dim": "Number of input features.",
+      "block_output_dim": "Number of output features.",
+      "hidden_dim": "Number of hidden units in each layer.",
+      "num_layers": "Number of hidden layers."
+    }
+  },
+  "CustomRNN": {
+    "description": "A simple recurrent neural network layer with fully connected layers before and after.",
+    "parameters": {
+      "input_size": "The number of expected features in the input (before applying the first FC layer).",
+      "hidden_size": "The number of features in the hidden state.",
+      "num_layers": "Number of stacked RNN layers.",
+      "batch_first": "If true, the input and output tensors are provided as (batch, seq, feature).",
+      "dropout": "Dropout probability applied between layers.",
+      "block_input_dim": "The input size for the first fully connected layer.",
+      "block_output_dim": "The output size for the last fully connected layer."
+    }
+  },
+  "CustomGRU": {
+    "description": "A gated recurrent unit layer with fully connected layers before and after.",
+    "parameters": {
+      "input_size": "The number of expected features in the input (before applying the first FC layer).",
+      "hidden_size": "The number of features in the hidden state.",
+      "num_layers": "Number of stacked GRU layers.",
+      "batch_first": "If true, the input and output tensors are provided as (batch, seq, feature).",
+      "dropout": "Dropout probability applied between layers.",
+      "block_input_dim": "The input size for the first fully connected layer.",
+      "block_output_dim": "The output size for the last fully connected layer."
+    }
+  },
+  "CustomLSTM": {
+    "description": "A long short-term memory layer with fully connected layers before and after.",
+    "parameters": {
+      "input_size": "The number of expected features in the input (before applying the first FC layer).",
+      "hidden_size": "The number of features in the hidden state.",
+      "num_layers": "Number of stacked LSTM layers.",
+      "batch_first": "If true, the input and output tensors are provided as (batch, seq, feature).",
+      "dropout": "Dropout probability applied between layers.",
+      "bidirectional": "If true, becomes a bidirectional LSTM.",
+      "block_input_dim": "The input size for the first fully connected layer.",
+      "block_output_dim": "The output size for the last fully connected layer."
+    }
+  },
+  "CustomTransformer": {
+    "description": "A full transformer model with encoder-decoder structure.",
+    "parameters": {
+      "d_model": "The number of expected features in the input.",
+      "nhead": "The number of attention heads.",
+      "num_encoder_layers": "Number of encoder layers in the transformer.",
+      "num_decoder_layers": "Number of decoder layers in the transformer.",
+      "dim_feedforward": "Dimension of the feedforward network.",
+      "dropout": "Dropout probability applied in the layers.",
+      "block_input_dim": "The input size for the first fully connected layer.",
+      "block_output_dim": "The output size for the last fully connected layer."
+    }
+  },
+  "CustomMultiheadAttention": {
+    "description": "A multi-head attention mechanism.",
+    "parameters": {
+      "embed_dim": "The total dimension of the input embedding.",
+      "num_heads": "The number of attention heads.",
+      "dropout": "Dropout probability applied to attention weights.",
+      "batch_first": "If true, the input and output tensors are provided as (batch, seq, feature).",
+      "kdim": "Dimensionality of the key vectors (default: same as embed_dim).",
+      "vdim": "Dimensionality of the value vectors (default: same as embed_dim).",
+      "block_input_dim": "The input size for the first fully connected layer.",
+      "block_output_dim": "The output size for the last fully connected layer."
+    }
+  }
+}

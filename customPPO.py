@@ -6,14 +6,15 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from utils.utils import ReplayBuffer, make_mini_batch, convert_to_tensor
+from utils.utils import ReplayBuffer
+from actor import Actor
+from critic import Critic
 
 
 class PPO(nn.Module):
     def __init__(
             self, 
-            actor,
-            critic,
+            model_type,
             state_dim,
             action_dim,
             writer,
@@ -22,34 +23,40 @@ class PPO(nn.Module):
             **kwargs
         ):
         super(PPO, self).__init__()
-        self.actor = actor
-        self.critic = critic
+        self.writer = writer
+        self.device = device
+        self.episode_num = -1
+
+        self.actor = Actor(state_dim=state_dim, action_dim=action_dim, model_type=model_type, trainable_std=True)
+        self.critic = Critic(state_dim==state_dim, model_type=model_type)
         self.hidden_state_actor = None
         self.hidden_state_critic = None
         self.args = args
         self.kwargs = kwargs
 
         self.data = ReplayBuffer(
-            action_prob_exist=True, 
             max_size=self.args.traj_length, 
             state_dim=state_dim,
-            num_action=action_dim
+            num_action=action_dim,
+            device=self.device,
         )
 
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=self.args.actor_lr)
         self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=self.args.critic_lr)
-
-        self.writer = writer
-        self.device = device
-    
+   
     def get_action(self, x):
-        x = torch.tensor(x, dtype=torch.float32, device=self.device).unsqueeze(0) if len(x.shape) == 1 else x
-        mu, sigma, self.hidden_state_actor = self.actor(x, self.hidden_state_actor)
+        x = x.unsqueeze(0) if len(x.shape) == 1 else x
+        mu, sigma, *hidden_state = self.actor(x, self.hidden_state_actor)
+
+        if hidden_state is not None and len(hidden_state) == 1: self.hidden_state_actor = hidden_state[0]
+
         return mu, sigma
     
     def v(self, x):
-        x = torch.tensor(x, dtype=torch.float32, device=self.device).unsqueeze(0) if len(x.shape) == 1 else x
-        value, self.hidden_state_critic = self.critic(x, self.hidden_state_critic)
+        x = x.unsqueeze(0) if len(x.shape) == 1 else x
+        value, *hidden_state = self.critic(x, self.hidden_state_critic)
+
+        if hidden_state is not None and len(hidden_state) == 1: self.hidden_state_critic = hidden_state[0]
         return value
 
     def put_data(self, transition):
@@ -78,26 +85,15 @@ class PPO(nn.Module):
         advantages = torch.tensor(advantage_lst, dtype=torch.float).to(self.device)
         return values, advantages
 
-    def train_net(self, n_epi):
-        data = self.data.sample(shuffle=False)
-        data_tensor = convert_to_tensor(
-            self.device, 
-            data['state'],
-            data['action'], 
-            data['reward'],
-            data['next_state'],
-            data['done'], 
-            data['log_prob']
-        )
-        states, actions, rewards, next_states, dones, old_log_probs = data_tensor 
-        old_values, advantages = self.get_gae(states, rewards, next_states, dones)
-        returns = advantages + old_values
-        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-3)
+    def train_net(self):
+        self.episode_num += 1
 
-        for i in range(self.args.train_epoch):
-            for state, action, old_log_prob, advantage, return_, old_value \
-                    in make_mini_batch(self.args.batch_size, states, actions, \
-                                       old_log_probs, advantages, returns, old_values): ### TODO fix this abomonation
+        for _ in range(self.args.train_epoch):
+            for batch in self.data.make_mini_batch(
+                self.args.batch_size, 
+                self.get_gae,
+            ):
+                state, action, old_log_prob, advantage, return_, old_value = batch
                 curr_mu, curr_sigma = self.get_action(state)
                 value = self.v(state).float()
                 curr_dist = torch.distributions.Normal(curr_mu, curr_sigma)
@@ -127,5 +123,5 @@ class PPO(nn.Module):
                 self.critic_optimizer.step()
 
                 if self.writer != None:
-                    self.writer.add_scalar("loss/actor_loss", actor_loss.item(), n_epi)
-                    self.writer.add_scalar("loss/critic_loss", critic_loss.item(), n_epi)
+                    self.writer.add_scalar("loss/actor_loss", actor_loss.item(), self.episode_num)
+                    self.writer.add_scalar("loss/critic_loss", critic_loss.item(), self.episode_num)

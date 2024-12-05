@@ -4,6 +4,8 @@ from argparse import ArgumentParser
 import torch
 import numpy as np
 import os
+import itertools
+import json
 
 import wandb
 
@@ -11,6 +13,7 @@ from customPPO import PPO
 from rideshare.env_multi import MultiRideshareEnv
 
 from utils.utils import make_transition, Dict, RunningMeanStd
+from ModelFactory import ModelFactory
 
 os.makedirs('./model_weights', exist_ok=True)
 
@@ -27,14 +30,14 @@ parser.add_argument("--save_interval", type=int, default=100000, help='save inte
 parser.add_argument("--print_interval", type=int, default=10000, help='print interval(default : 20)')
 parser.add_argument("--use_cuda", type=bool, default=True, help='cuda usage(default : True)')
 parser.add_argument("--reward_scaling", type=float, default=1, help='reward scaling(default : 0.1)')
-args = parser.parse_args()
+cli_args = parser.parse_args()
 parser = ConfigParser()
 parser.read('config.ini')
-agent_args = Dict(parser, args.algo)
+agent_args = Dict(parser, cli_args.algo)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-if args.tensorboard:
+if cli_args.tensorboard:
     from torch.utils.tensorboard import SummaryWriter
 
     writer = SummaryWriter()
@@ -83,9 +86,21 @@ action_dim = action_shape[0] * action_shape[1]
 state_dim = env.observation_space(None).shape[0]
 state_rms = RunningMeanStd(state_dim)
 
-class PPOAgent:
-    def __init__(self, writer, device, state_dim, action_dim, agent_args):
-        self.agent = PPO(writer, device, state_dim, action_dim, agent_args)
+model_kwargs_configs = json.load(open('default_model_config.json'))
+model_permutations = list(itertools.permutations(model_kwargs_configs.keys(), 2))
+
+tmp_agents = model_permutations[0] 
+
+class CompanyPriceModel:
+    def __init__(self, model_type, writer, device, state_dim, action_dim, agent_args):
+        self.agent = PPO(
+            model_type,
+            writer=writer, 
+            device=device, 
+            state_dim=state_dim, 
+            action_dim=action_dim, 
+            args=agent_args,
+        )
 
     def sample_action(self, state):
         self.mu, self.sigma = self.agent.get_action(torch.from_numpy(state).float().to(device))
@@ -106,19 +121,21 @@ class PPOAgent:
 
 
 if args.algo == 'ppo':
-    agent_U = PPOAgent(
+    agent_U = CompanyPriceModel(
+        model_type='short_skinny_fcc',
         writer=writer, 
         device=device, 
         state_dim=state_dim, 
         action_dim=action_dim, 
-        args=agent_args
+        agent_args=agent_args
     )
-    agent_L = PPOAgent(
+    agent_L = CompanyPriceModel(
+        model_type='tall_skinny_fcc',
         writer=writer, 
         device=device, 
         state_dim=state_dim, 
         action_dim=action_dim, 
-        args=agent_args
+        agent_args=agent_args
     )
 else:
     raise NotImplementedError("Only PPO supported for now")
@@ -140,7 +157,7 @@ observations, infos = (env.reset(seed=seed))
 state_ = observations[possible_agents[0]]   # agents share the observation so doesn't really matter which dict we pull from
 # state = np.clip((state_ - state_rms.mean) / (state_rms.var ** 0.5 + 1e-8), -5, 5)
 state = state_
-for n_epi in range(args.epochs):
+for _ in range(args.epochs):
     for t in range(agent_args.traj_length):
         state_lst.append(state_)
         action_U = agent_U.sample_action(state)
@@ -159,7 +176,7 @@ for n_epi in range(args.epochs):
         agent_U.record_transition(next_state, reward_U, False)
         agent_L.record_transition(next_state, reward_L, False)
 
-    agent_U.agent.train_net(n_epi)
-    agent_L.agent.train_net(n_epi)
+    agent_U.agent.train_net()
+    agent_L.agent.train_net()
     # state_rms.update(np.vstack(state_lst))
     env.reset(seed=None)
