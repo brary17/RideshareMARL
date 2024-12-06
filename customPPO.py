@@ -27,8 +27,18 @@ class PPO(nn.Module):
         self.device = device
         self.episode_num = -1
 
-        self.actor = Actor(state_dim=state_dim, action_dim=action_dim, model_type=model_type, trainable_std=True)
-        self.critic = Critic(state_dim==state_dim, model_type=model_type)
+        self.actor = Actor(
+            state_dim=state_dim, 
+            action_dim=action_dim, 
+            model_type=model_type, 
+            trainable_std=True
+        ).to(device)
+
+        self.critic = Critic(
+            state_dim=state_dim, 
+            model_type=model_type
+        ).to(device)
+
         self.hidden_state_actor = None
         self.hidden_state_critic = None
         self.args = args
@@ -53,14 +63,12 @@ class PPO(nn.Module):
         return mu, sigma
     
     def v(self, x):
-        x = x.unsqueeze(0) if len(x.shape) == 1 else x
         value, *hidden_state = self.critic(x, self.hidden_state_critic)
-
         if hidden_state is not None and len(hidden_state) == 1: self.hidden_state_critic = hidden_state[0]
         return value
 
-    def put_data(self, transition):
-        self.data.put_data(transition)
+    def put_data(self, state, action, reward, next_state, done, log_probs):
+        self.data.put_data(state, action, reward, next_state, done, log_probs)
 
     def reset_hidden_states(self):
         self.hidden_state_actor = None
@@ -90,8 +98,9 @@ class PPO(nn.Module):
 
         for _ in range(self.args.train_epoch):
             for batch in self.data.make_mini_batch(
-                self.args.batch_size, 
-                self.get_gae,
+                shuffle=False,
+                mini_batch_size=self.args.batch_size, 
+                get_gae=self.get_gae,
             ):
                 state, action, old_log_prob, advantage, return_, old_value = batch
                 curr_mu, curr_sigma = self.get_action(state)

@@ -1,81 +1,63 @@
 {
   "short_skinny_fcc": {
     "model_type": "fully_connected",
-    "block_input_dim": 64,
-    "block_output_dim": 4,
-    "hidden_dim": 128,
+    "hidden_dim": 32,
     "num_layers": 2
   },
   "short_thick_fcc": {
     "model_type": "fully_connected",
-    "block_input_dim": 64,
-    "block_output_dim": 4,
-    "hidden_dim": 1024,
+    "hidden_dim": 256,
     "num_layers": 2
   },
   "tall_skinny_fcc": {
     "model_type": "fully_connected",
-    "block_input_dim": 64,
-    "block_output_dim": 4,
-    "hidden_dim": 128,
-    "num_layers": 6
+    "hidden_dim": 32,
+    "num_layers": 4
   },
   "tall_think_fcc": {
     "model_type": "fully_connected",
-    "block_input_dim": 64,
-    "block_output_dim": 4,
-    "hidden_dim": 1024,
-    "num_layers": 6
+    "hidden_dim": 256,
+    "num_layers": 4
   },
   "rnn": {
     "model_type": "rnn",
-    "input_size": 128,
-    "hidden_size": 512,
-    "num_layers": 3,
+    "input_size": 32,
+    "hidden_size": 128,
+    "num_layers": 2,
     "batch_first": true,
-    "dropout": 0.2,
-    "block_input_dim": 64,
-    "block_output_dim": 4
+    "dropout": 0.2
   },
   "gru": {
     "model_type": "gru",
-    "input_size": 128,
-    "hidden_size": 512,
-    "num_layers": 3,
+    "input_size": 32,
+    "hidden_size": 128,
+    "num_layers": 2,
     "batch_first": true,
-    "dropout": 0.2,
-    "block_input_dim": 64,
-    "block_output_dim": 4
+    "dropout": 0.2
   },
   "lstm": {
     "model_type": "lstm",
-    "input_size": 128,
-    "hidden_size": 512,
-    "num_layers": 3,
+    "input_size": 32,
+    "hidden_size": 128,
+    "num_layers": 2,
     "batch_first": true,
     "dropout": 0.2,
-    "bidirectional": false,
-    "block_input_dim": 64,
-    "block_output_dim": 4
+    "bidirectional": false
   },
   "transformer": {
     "model_type": "transformer",
-    "d_model": 64,
-    "nhead": 8,
+    "d_model": 32,
+    "nhead": 4,
     "num_encoder_layers": 2,
     "num_decoder_layers": 2,
-    "dim_feedforward": 128,
-    "dropout": 0.2,
-    "block_input_dim": 64,
-    "block_output_dim": 4
+    "dim_feedforward": 32,
+    "dropout": 0.2
   },
   "multiheadattention": {
     "model_type": "multihead_attention",
-    "embed_dim": 64,
-    "num_heads": 8,
+    "embed_dim": 32,
+    "num_heads": 4,
     "dropout": 0.2,
-    "batch_first": true,
-    "block_input_dim": 64,
-    "block_output_dim": 4
+    "batch_first": true
   }
 }

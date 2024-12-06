@@ -19,7 +19,9 @@ class Network(nn.Module):
         self.network_init()
 
     def forward(self, x, *args, hidden_state=None, **kwargs):
-        if hidden_state is None: return self.model(x)
+        if hidden_state is None: 
+            return self.model(x), None
+
         return self.model(x, hidden_state)
     
     def network_init(self):

@@ -4,34 +4,6 @@ import numpy as np
 import torch
 
 
-class Dict(dict):
-    def __init__(self, config, section_name, location=False):
-        super(Dict, self).__init__()
-        self.initialize(config, section_name, location)
-
-    def initialize(self, config, section_name, location):
-        for key, value in config.items(section_name):
-            if location:
-                self[key] = value
-            else:
-                self[key] = eval(value)
-
-    def __getattr__(self, val):
-        return self[val]
-
-
-def make_transition(state, action, reward, next_state, done, log_prob=None):
-    transition = {}
-    transition['state'] = state
-    transition['action'] = action
-    transition['reward'] = reward
-    transition['next_state'] = next_state
-    transition['log_prob'] = log_prob
-    transition['done'] = done
-    return transition
-
-
-
 class ReplayBuffer:
     def __init__(
             self, 
@@ -43,6 +15,7 @@ class ReplayBuffer:
         self.max_size = max_size
         self.data_idx = 0
         self.device = device
+        self.end_pointer = 0
 
         # Pre-allocate tensors for buffer data
         self.states: torch.Tensor = torch.zeros((max_size, state_dim), device=self.device)
@@ -52,18 +25,25 @@ class ReplayBuffer:
         self.dones: torch.Tensor = torch.zeros((max_size, 1), device=self.device)
         self.log_probs: torch.Tensor = torch.zeros((max_size, 1), device=self.device)
 
-    def put_data(self, transition):
-        self.states[self.data_idx] = torch.tensor(transition['state'], device=self.device)
-        self.actions[self.data_idx] = torch.tensor(transition['action'], device=self.device)
-        self.rewards[self.data_idx] = torch.tensor(transition['reward'], device=self.device)
-        self.next_states[self.data_idx] = torch.tensor(transition['next_state'], device=self.device)
-        self.dones[self.data_idx] = torch.tensor(float(transition['done']), device=self.device)
-        self.log_probs[self.data_idx] = torch.tensor(transition['log_prob'], device=self.device)
+    def put_data(self, state, action, reward, next_state, done, log_probs):
+        state = state if isinstance(state, torch.Tensor) else torch.tensor(state, device=self.device)
+        action = action if isinstance(action, torch.Tensor) else torch.tensor(action, device=self.device)
+        reward = reward if isinstance(reward, torch.Tensor) else torch.tensor(reward, device=self.device)
+        next_state = next_state if isinstance(next_state, torch.Tensor) else torch.tensor(next_state, device=self.device)
+        done = done if isinstance(done, torch.Tensor) else torch.tensor(done, device=self.device)
+
+        self.states[self.data_idx] = state
+        self.actions[self.data_idx] = action.flatten()
+        self.rewards[self.data_idx] = reward
+        self.next_states[self.data_idx] = next_state
+        self.dones[self.data_idx] = done
+        self.log_probs[self.data_idx] = log_probs
 
         self.data_idx = (self.data_idx + 1) % self.max_size
+        self.end_pointer = min(self.end_pointer + 1, self.max_size)
 
-    def sample(self, batch_size=None, time_steps=1):
-        if batch_size is None:
+    def sample(self, shuffle, batch_size=None, time_steps=1):
+        if not shuffle or batch_size is None:
             max_idx = self.size()
             return (
                 self.states[:max_idx], 
@@ -88,17 +68,19 @@ class ReplayBuffer:
         return sampled_states, sampled_actions, sampled_rewards, sampled_next_states, sampled_dones
 
     def size(self):
-        return min(self.max_size, self.data_idx)
+        return min(self.max_size, self.end_pointer)
 
-    def make_mini_batch(self, mini_batch_size, get_gae):
-        data = self.sample()
+    def make_mini_batch(self, shuffle, mini_batch_size, get_gae):
+        data = self.sample(shuffle, mini_batch_size)
         states, actions, rewards, next_states, dones, old_log_probs = data
         old_values, advantages = get_gae(states, rewards, next_states, dones)
         returns = advantages + old_values
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-3)
 
+        index_func = torch.randperm if shuffle else torch.arange
+
         full_batch_size = states.size(0)
-        full_indices = torch.randperm(full_batch_size, device=self.device)
+        full_indices = index_func(full_batch_size, device=self.device)
         for i in range((full_batch_size // mini_batch_size)+1):
                 indices = full_indices[mini_batch_size * i: min(mini_batch_size * (i + 1), len(full_indices))]
                 yield (

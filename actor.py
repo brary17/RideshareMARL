@@ -24,6 +24,7 @@ class Actor(Network):
         mu, *hidden_state = super().forward(x, hidden_state)
         if self.trainable_std:
             std = torch.exp(self.logstd)
+            std = std.repeat(mu.size(0), 1)
         else:
             logstd = torch.zeros_like(mu)
             std = torch.exp(logstd)

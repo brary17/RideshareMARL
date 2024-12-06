@@ -65,14 +65,14 @@ class CustomLSTM(CustomTimeSeriesModel):
 class CustomFullyConnected(CustomModel):
     def __init__(self, block_input_dim, block_output_dim, hidden_dim, num_layers):
         super().__init__()
-        layers = []
-        layers.append(nn.Linear(block_input_dim, hidden_dim))
-        layers.append(nn.ReLU())
+        self.layers = []
+        self.layers.append(nn.Linear(block_input_dim, hidden_dim))
+        self.layers.append(nn.ReLU())
         for _ in range(num_layers - 1):
-            layers.append(nn.Linear(hidden_dim, hidden_dim))
-            layers.append(nn.ReLU())
-        layers.append(nn.Linear(hidden_dim, block_output_dim))
-        self.model = nn.Sequential(*layers)
+            self.layers.append(nn.Linear(hidden_dim, hidden_dim))
+            self.layers.append(nn.ReLU())
+        self.layers.append(nn.Linear(hidden_dim, block_output_dim))
+        self.model = nn.Sequential(*self.layers)
 
     def forward(self, x):
         return self.model(x)
