@@ -18,11 +18,8 @@ class Network(nn.Module):
         self.model = ModelFactory.create_model(**kwargs)
         self.network_init()
 
-    def forward(self, x, *args, hidden_state=None, **kwargs):
-        if hidden_state is None: 
-            return self.model(x), None
-
-        return self.model(x, hidden_state)
+    def forward(self, x):
+        return self.model(x)
     
     def network_init(self):
         for layer in self.model.modules():

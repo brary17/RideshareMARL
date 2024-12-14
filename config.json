@@ -1,0 +1,39 @@
+{
+  "ppo": {
+    "entropy_coef": 0.01,
+    "critic_coef": 0.5,
+    "actor_lr": 0.0003,
+    "critic_lr": 0.0003,
+    "hidden_dim": 128,
+    "gamma": 0.99,
+    "lambda": 0.95,
+    "max_clip": 0.2,
+    "train_epoch": 50,
+    "traj_length": 512,
+    "batch_size": 64,
+    "max_grad_norm": 0.5,
+    "layer_num": 2,
+    "activation_function": "torch.tanh",
+    "last_activation_critic": null,
+    "last_activation_actor": "torch.sigmoid",
+    "trainable_std": true,
+    "on_policy": true
+  },
+  "environment": {
+    "OD": [[0.0, 0.9], [0.2, 0.0]],
+    "C": [[0.0, 5.0], [2.0, 0.0]],
+    "init_passenger_distribution": [2000.0, 3000.0],
+    "init_driver_distribution": [500.0, 1000.0],
+    "max_rate": 20.0,
+    "max_timestep": 6912000,  
+    "lbd": 2.0,
+    "rp": 10.0,
+    "g": 5.0,
+    "num_D_samples": 10,
+    "a_d": 0.05,
+    "p_d": 1.0,
+    "alpha": 0.01,
+    "mode": "interp",
+    "traj_length": 512
+  }
+}

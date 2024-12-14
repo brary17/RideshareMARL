@@ -39,8 +39,6 @@ class PPO(nn.Module):
             model_type=model_type
         ).to(device)
 
-        self.hidden_state_actor = None
-        self.hidden_state_critic = None
         self.args = args
         self.kwargs = kwargs
 
@@ -56,16 +54,12 @@ class PPO(nn.Module):
    
     def get_action(self, x):
         x = x.unsqueeze(0) if len(x.shape) == 1 else x
-        mu, sigma, *hidden_state = self.actor(x, self.hidden_state_actor)
-
-        if hidden_state is not None and len(hidden_state) == 1: self.hidden_state_actor = hidden_state[0]
+        mu, sigma = self.actor(x)
 
         return mu, sigma
     
     def v(self, x):
-        value, *hidden_state = self.critic(x, self.hidden_state_critic)
-        if hidden_state is not None and len(hidden_state) == 1: self.hidden_state_critic = hidden_state[0]
-        return value
+        return self.critic(x)
 
     def put_data(self, state, action, reward, next_state, done, log_probs):
         self.data.put_data(state, action, reward, next_state, done, log_probs)

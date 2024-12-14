@@ -20,15 +20,15 @@ class Actor(Network):
         if self.trainable_std:
             self.logstd = torch.nn.Parameter(torch.zeros(1, action_dim))
 
-    def forward(self, x, hidden_state=None):
-        mu, *hidden_state = super().forward(x, hidden_state)
+    def forward(self, x):
+        mu = super().forward(x)
         if self.trainable_std:
             std = torch.exp(self.logstd)
             std = std.repeat(mu.size(0), 1)
         else:
             logstd = torch.zeros_like(mu)
             std = torch.exp(logstd)
-        return mu, std, hidden_state
+        return mu, std
 
     def save(self, path):
         super().save("actor_" + path)

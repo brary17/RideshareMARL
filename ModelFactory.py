@@ -13,23 +13,34 @@ class CustomModel(ABC, nn.Module):
     def forward(self, *inputs, **kwargs):
         pass
 
+    def reset_hidden_state(self):
+        return None
+
 
 class CustomTimeSeriesModel(CustomModel):
     def __init__(self, fc_input_size, fc_output_size, time_series_block, **kwargs):
         super(CustomTimeSeriesModel, self).__init__()
+
+        self.hidden_size = kwargs['hidden_size']
+        self.num_layers = kwargs['num_layers']
         
         self.fc_in = nn.Linear(fc_input_size, kwargs['input_size'])
         self.time_series_block = time_series_block(**kwargs)
-        self.fc_out = nn.Linear(kwargs['hidden_size'], fc_output_size)
+        self.fc_out = nn.Linear(self.hidden_size, fc_output_size)
 
-    def forward(self, x, state=None):
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.hidden_state = None
+
+    def forward(self, x, state):
         x = self.fc_in(x)
-        x, new_state = self.time_series_block(x, state)
+        x, new_hidden_state = self.time_series_block(x, state)
         x = self.fc_out(x)
-        return x, new_state
+        return x, new_hidden_state
     
     def reset_hidden_states(self):
-        pass
+        self.hidden_state = torch.zeros(
+            self.num_layers, 1, self.hidden_size, device=self.device
+        )
 
 
 class CustomRNN(CustomTimeSeriesModel):
@@ -41,6 +52,14 @@ class CustomRNN(CustomTimeSeriesModel):
             **kwargs
         )
 
+    def forward(self, x: torch.Tensor):
+        x = x.unsqueeze(dim=1)
+        if self.hidden_state is None: super().reset_hidden_states()
+        extend_state = self.hidden_state[:, :1, :].repeat(1, x.size(0), 1)
+        output, self.hidden_state = super().forward(x, extend_state)
+        self.hidden_state = self.hidden_state[:, -1, :]
+        return output[:, -1, :]
+
 
 class CustomGRU(CustomTimeSeriesModel):
     def __init__(self, **kwargs):
@@ -51,6 +70,14 @@ class CustomGRU(CustomTimeSeriesModel):
             **kwargs
         )
 
+    def forward(self, x: torch.Tensor):
+        x = x.unsqueeze(dim=1)
+        if self.hidden_state is None: super().reset_hidden_states()
+        extend_state = self.hidden_state[:, :1, :].repeat(1, x.size(0), 1)
+        output, self.hidden_state = super().forward(x, extend_state) 
+        self.hidden_state = self.hidden_state[:, -1, :]
+        return output[:, -1, :]
+
 
 class CustomLSTM(CustomTimeSeriesModel):
     def __init__(self, **kwargs):
@@ -60,6 +87,24 @@ class CustomLSTM(CustomTimeSeriesModel):
             time_series_block=nn.LSTM,
             **kwargs
         )
+        self.cell_state = None
+
+    def reset_hidden_states(self):
+        super().reset_hidden_states()
+        # Initialize cell state for LSTM
+        self.cell_state = torch.zeros(
+            self.num_layers, 1, self.hidden_size, device=self.device
+        )
+
+    def forward(self, x: torch.Tensor):
+        x = x.unsqueeze(dim=1)
+        if self.hidden_state is None or self.cell_state is None: self.reset_hidden_states()
+        extend_h_state = self.hidden_state[:, :1, :].repeat(1, x.size(0), 1)
+        extend_c_state = self.cell_state[:, :1, :].repeat(1, x.size(0), 1)
+        output, (self.hidden_state, self.cell_state) = super().forward(x, (extend_h_state, extend_c_state))
+        self.hidden_state = self.hidden_state[:, -1, :]
+        self.cell_state = self.cell_state[:, -1, :]
+        return output[:, -1, :]
 
 
 class CustomFullyConnected(CustomModel):

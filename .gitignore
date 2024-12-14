@@ -4,3 +4,4 @@
 **/.venv/**
 **/wandb/**
 **/runs/**
+**/my_runs/**

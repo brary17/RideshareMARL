@@ -18,46 +18,5 @@
     "model_type": "fully_connected",
     "hidden_dim": 256,
     "num_layers": 4
-  },
-  "rnn": {
-    "model_type": "rnn",
-    "input_size": 32,
-    "hidden_size": 128,
-    "num_layers": 2,
-    "batch_first": true,
-    "dropout": 0.2
-  },
-  "gru": {
-    "model_type": "gru",
-    "input_size": 32,
-    "hidden_size": 128,
-    "num_layers": 2,
-    "batch_first": true,
-    "dropout": 0.2
-  },
-  "lstm": {
-    "model_type": "lstm",
-    "input_size": 32,
-    "hidden_size": 128,
-    "num_layers": 2,
-    "batch_first": true,
-    "dropout": 0.2,
-    "bidirectional": false
-  },
-  "transformer": {
-    "model_type": "transformer",
-    "d_model": 32,
-    "nhead": 4,
-    "num_encoder_layers": 2,
-    "num_decoder_layers": 2,
-    "dim_feedforward": 32,
-    "dropout": 0.2
-  },
-  "multiheadattention": {
-    "model_type": "multihead_attention",
-    "embed_dim": 32,
-    "num_heads": 4,
-    "dropout": 0.2,
-    "batch_first": true
   }
 }

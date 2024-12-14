@@ -7,6 +7,7 @@ import os
 import itertools
 import json
 import tqdm
+from datetime import datetime
 
 import wandb
 
@@ -34,6 +35,18 @@ class Dict(dict):
 
 
 def main(cli_args, agent_args, env_kwargs):
+    datetime_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    file_name = f"my_runs/results_{datetime_str}.txt"
+
+    print(file_name)
+    records = {
+        "filename": file_name, 
+        'profit_records': {
+            'name': "short_skinny_fcc & tall_skinny_fcc",
+            'U' : [],
+            'L' : [],
+        }
+    }
     if cli_args.tensorboard:
         from torch.utils.tensorboard import SummaryWriter
 
@@ -41,95 +54,106 @@ def main(cli_args, agent_args, env_kwargs):
     else:
         writer = None
 
+    model_kwargs_configs = json.load(open('default_model_config.json'))
+    model_permutations = list(itertools.combinations_with_replacement(model_kwargs_configs.keys(), 2))
 
-    run = wandb.init(
-        project="Two-Way Markets",
-        config={**env_kwargs, **agent_args},
-    )
+    for perms in model_permutations:
+        model_U_type = perms[0]
+        model_L_type = perms[1]
 
-    env = MultiRideshareEnv(**env_kwargs)
-    possible_agents = env.possible_agents
-
-    action_shape = env.action_space(None).shape
-    state_dim = env.observation_space(None).shape[0]
-    state_rms = RunningMeanStd(state_dim)
-
-    # model_kwargs_configs = json.load(open('default_model_config.json'))
-    # model_permutations = list(itertools.permutations(model_kwargs_configs.keys(), 2))
-
-    # tmp_agents = model_permutations[0] 
-
-    if cli_args.algo == 'ppo':
-        device = torch.device(
-            'cuda' if (
-                torch.cuda.is_available() and 
-                (cli_args.use_cuda)
-            )
-            else 'cpu'
+        run = wandb.init(
+            project="Two-Way Markets",
+            config={**env_kwargs, **agent_args},
+            name=f"250: {model_U_type} & {model_L_type}"
         )
-        agent_U = CompanyPriceModel(
-            model_type='short_skinny_fcc',
-            writer=writer, 
-            device=device, 
-            state_dim=state_dim, 
-            action_shape=action_shape, 
-            agent_args=agent_args
-        )
-        agent_L = CompanyPriceModel(
-            model_type='tall_skinny_fcc',
-            writer=writer, 
-            device=device, 
-            state_dim=state_dim, 
-            action_shape=action_shape, 
-            agent_args=agent_args
-        )
-    else:
-        raise NotImplementedError("Only PPO supported for now")
 
-    score_lst = []
-    state_lst = []
+        env = MultiRideshareEnv(**env_kwargs)
+        possible_agents = env.possible_agents
 
-    seed = 42
-    observations, _ = (env.reset(seed=seed))
-    state = observations[possible_agents[0]]   # agents share the observation
-    # state = np.clip((state_ - state_rms.mean) / (state_rms.var ** 0.5 + 1e-8), -5, 5)
-    for _ in tqdm.tqdm(range(cli_args.epochs)):
-        for t in range(agent_args.traj_length):
-            state_lst.append(state)
-            action_U = agent_U.sample_action(state)
-            action_L = agent_L.sample_action(state)
-            actions = {"U": action_U, "L": action_L}
-            # Do something to make the log work
-            log = agent_args.traj_length -1 == t
-            observations, rewards, terminations, truncations, _ = env.step(actions, log)
+        action_shape = env.action_space(None).shape
+        state_dim = env.observation_space(None).shape[0]
+        state_rms = RunningMeanStd(state_dim)
 
-            next_state = observations["U"] # agents share observations
-            reward_U, reward_L = rewards["U"], rewards["L"]
 
-            # next_state = np.clip((next_state_ - state_rms.mean) / (state_rms.var ** 0.5 + 1e-8), -5, 5)
-            agent_U.record_transition(
-                state=state,
-                action=action_U,
-                reward=reward_U,
-                next_state=next_state, 
-                done=(terminations['U'] or truncations['U']),
+        if cli_args.algo == 'ppo':
+            device = torch.device(
+                'cuda' if (
+                    torch.cuda.is_available() and 
+                    (cli_args.use_cuda)
+                )
+                else 'cpu'
             )
-            agent_L.record_transition(
-                state=state,
-                action=action_L,
-                reward=reward_L,
-                next_state=next_state, 
-                done=(terminations['L'] or truncations['L']),
+            agent_U = CompanyPriceModel(
+                model_type=model_U_type,
+                writer=writer, 
+                device=device, 
+                state_dim=state_dim, 
+                action_shape=action_shape, 
+                agent_args=agent_args
             )
+            agent_L = CompanyPriceModel(
+                model_type=model_L_type,
+                writer=writer, 
+                device=device, 
+                state_dim=state_dim, 
+                action_shape=action_shape, 
+                agent_args=agent_args
+            )
+        else:
+            raise NotImplementedError("Only PPO supported for now")
 
-            state = next_state
-            if terminations['U'] or terminations['L'] or truncations['U'] or truncations['L']:
-                break
+        score_lst = []
+        state_lst = []
 
-        agent_U.agent.train_net()
-        agent_L.agent.train_net()
-        # state_rms.update(np.vstack(state_lst))
-        env.reset(seed=None)
+        seed = 42
+        observations, _ = (env.reset(seed=seed))
+        state = observations[possible_agents[0]]   # agents share the observation
+        # state = np.clip((state_ - state_rms.mean) / (state_rms.var ** 0.5 + 1e-8), -5, 5)
+        for _ in tqdm.tqdm(range(cli_args.epochs)):
+            for t in range(agent_args.traj_length):
+                state_lst.append(state)
+                action_U = agent_U.sample_action(state)
+                action_L = agent_L.sample_action(state)
+                actions = {"U": action_U, "L": action_L}
+                # Do something to make the log work
+                log = agent_args.traj_length -1 == t
+                observations, rewards, terminations, truncations, _ = env.step(actions, log)
+
+                next_state = observations["U"] # agents share observations
+                reward_U, reward_L = rewards["U"], rewards["L"]
+
+                records['profit_records']['U'].append(reward_U)
+                records['profit_records']['L'].append(reward_L)
+
+                # next_state = np.clip((next_state_ - state_rms.mean) / (state_rms.var ** 0.5 + 1e-8), -5, 5)
+                agent_U.record_transition(
+                    state=state,
+                    action=action_U,
+                    reward=reward_U,
+                    next_state=next_state, 
+                    done=(terminations['U'] or truncations['U']),
+                )
+                agent_L.record_transition(
+                    state=state,
+                    action=action_L,
+                    reward=reward_L,
+                    next_state=next_state, 
+                    done=(terminations['L'] or truncations['L']),
+                )
+
+                state = next_state
+                if terminations['U'] or terminations['L'] or truncations['U'] or truncations['L']:
+                    break
+
+            agent_U.agent.train_net()
+            agent_L.agent.train_net()
+            # state_rms.update(np.vstack(state_lst))
+            env.reset(seed=None)
+
+        # with open(records['filename'], "w") as file:
+        #     json.dump(records['profit_records'], file, indent=4)
+
+        wandb.finish()
 
 
 if __name__ == "__main__":
@@ -139,7 +163,7 @@ if __name__ == "__main__":
     parser.add_argument("--algo", type=str, default='ppo', help='algorithm to adjust (default : ppo)')
     parser.add_argument('--train', type=bool, default=True, help="(default: True)")
     parser.add_argument('--render', type=bool, default=False, help="(default: False)")
-    parser.add_argument('--epochs', type=int, default=500, help='number of epochs, (default: 1)')
+    parser.add_argument('--epochs', type=int, default=250, help='number of epochs, (default: 1)')
     parser.add_argument('--tensorboard', type=bool, default=False, help='use_tensorboard, (default: False)')
     parser.add_argument("--load", type=str, default='no', help='load network name in ./model_weights')
     parser.add_argument("--save_interval", type=int, default=100000, help='save interval(default: 100)')
