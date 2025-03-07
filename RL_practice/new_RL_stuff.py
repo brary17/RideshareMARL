@@ -22,7 +22,7 @@ def main():
 
     wandb.init(project="RL Practice", name="Lunar Landar Tests")
 
-    agent = Agent(**hyper_parameters)
+    agent = Agent(**{"wandb_stuff": wandb}, **hyper_parameters)
     reward_full = []
     min_epsilon = 0.01
     epsilon_decay = 0.995
